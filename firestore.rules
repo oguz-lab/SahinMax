@@ -1,0 +1,27 @@
+rules_version = '2';
+
+// Diese Regeln in der Firebase-Konsole einfügen:
+// Firestore Database → Regeln → Inhalt ersetzen → Veröffentlichen
+//
+// WICHTIG: Ersetze unten 'deine-email@example.com' durch deine E-Mail-Adresse (kleingeschrieben).
+// Nur angemeldete Nutzer mit diesen Adressen dürfen lesen und schreiben.
+//
+// Später weiteren Zugang hinzufügen? Adresse mit Komma ergänzen, z. B.:
+//   'deine-email@example.com', 'lena@sahinmax.local'
+// (In der App meldet man sich dann nur mit „lena“ an.)
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAllowed() {
+      return request.auth != null
+        && request.auth.token.email != null
+        && request.auth.token.email.lower() in [
+          'deine-email@example.com'
+        ];
+    }
+
+    match /{document=**} {
+      allow read, write: if isAllowed();
+    }
+  }
+}
