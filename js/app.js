@@ -15,7 +15,7 @@ const S = {
 };
 const UI = {
   movieGroup: 'all', seriesGroup: 'all', franchiseFilm: 'all', seriesSeason: 'all', sortMode: false,
-  lib: 'all', libQ: '', libFlat: false, q: '', types: new Set(), status: 'all', group: 'all', bannerHidden: false
+  lib: 'all', libQ: '', libFlat: false, q: '', type: 'all', status: 'all', group: 'all', bannerHidden: false
 };
 let backend = null;
 
@@ -117,8 +117,10 @@ const demoFlag = () => { try { return sessionStorage.getItem('fv-demo') === '1';
 
 async function boot() {
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('./sw.js').catch(() => {});
-  if (!configured && !demoFlag()) return renderSetup();
-  try { backend = configured ? await firebaseBackend() : demoBackend(); }
+  // ?demo=1 erzwingt den lokalen Demo-Modus (nur Daten in diesem Browser, zum Ausprobieren)
+  const forceDemo = new URLSearchParams(location.search).has('demo');
+  if (!configured && !demoFlag() && !forceDemo) return renderSetup();
+  try { backend = configured && !forceDemo ? await firebaseBackend() : demoBackend(); }
   catch (e) { console.error(e); return renderFatal('Die Datenbank konnte nicht geladen werden. Bist du online? Lade die Seite neu.'); }
   S.demo = backend.demo;
   backend.onUser(u => {
@@ -280,12 +282,12 @@ function groupTile(href, name, covers, items, unit) {
 }
 
 // Auf-/zuklappbare Gruppen (Zustand pro Gerät gemerkt)
-const OPEN_DEFAULT = { filme: true, serien: true, mediathek: false };
+const OPEN_DEFAULT = { filme: false, serien: false, mediathek: false };
 function openState(view) {
-  try { const s = JSON.parse(localStorage.getItem('fv-open-' + view)); if (s && Array.isArray(s.t)) return s; } catch { /* egal */ }
+  try { const s = JSON.parse(localStorage.getItem('fv-open2-' + view)); if (s && Array.isArray(s.t)) return s; } catch { /* egal */ }
   return { def: OPEN_DEFAULT[view], t: [] };
 }
-function saveOpenState(view, s) { try { localStorage.setItem('fv-open-' + view, JSON.stringify(s)); } catch { /* egal */ } }
+function saveOpenState(view, s) { try { localStorage.setItem('fv-open2-' + view, JSON.stringify(s)); } catch { /* egal */ } }
 const isOpen = (view, gid) => { const s = openState(view); return s.t.includes(gid) ? !s.def : s.def; };
 
 function groupBlock({ view, gid, title, covers, sub, actions = '', body }) {
@@ -296,9 +298,8 @@ function groupBlock({ view, gid, title, covers, sub, actions = '', body }) {
         <span class="chev" aria-hidden="true">›</span>${coverStack(covers, title)}
         <span class="g-text"><span class="g-title">${esc(title)}</span><span class="g-sub">${sub}</span></span>
       </button>
-      ${actions ? `<div class="group-actions">${actions}</div>` : ''}
     </div>
-    <div class="group-body">${body}</div>
+    <div class="group-body">${actions ? `<div class="group-actions">${actions}</div>` : ''}${body}</div>
   </section>`;
 }
 const groupTools = view => `<div class="group-tools"><button class="link" data-act="setAllGroups" data-view="${view}" data-val="open">Alle aufklappen</button><button class="link" data-act="setAllGroups" data-view="${view}" data-val="closed">Alle zuklappen</button></div>`;
@@ -527,7 +528,7 @@ VIEWS.filme = function viewMovies(v) {
   if (looseMissing.length) html += groupBlock({
     view: 'filme', gid: '_', title: 'Einzelne Filme', covers: coversOf(looseMissing),
     sub: `${looseMissing.length} fehlen`,
-    actions: `<button class="ghost small" data-act="addMovie">＋ Film</button>`,
+    actions: `<button class="ghost small" data-act="addMovie">＋ Film hinzufügen</button>`,
     body: `<div class="cards">${looseMissing.map(m => movieCard(m)).join('')}</div>`
   });
   for (const { f, ms } of groups) {
@@ -538,7 +539,7 @@ VIEWS.filme = function viewMovies(v) {
       actions: `${ms.length ? vintedBtn(vintedUrl(f.name), 'Reihe auf Vinted') : ''}
         ${ms.length ? `<button class="success small" data-act="bulkFranchise" data-id="${esc(f.id)}">✓ Alle gekauft</button>` : ''}
         <button class="ghost small" data-act="addMovie" data-fr="${esc(f.id)}">＋ Film</button>
-        <a class="btn ghost small" href="#/franchise/${esc(f.id)}">Details</a>`,
+        <a class="btn ghost small" href="#/franchise/${esc(f.id)}">✎ Bearbeiten</a>`,
       body: ms.length ? `<div class="cards">${ms.map(m => movieCard(m)).join('')}</div>` : '<p class="muted">Noch keine Filme in dieser Reihe.</p>'
     });
   }
@@ -583,7 +584,7 @@ VIEWS.serien = function viewSeries(v) {
       actions: `${vintedBtn(vintedUrl(se.name + ' komplette Serie'), 'Serie auf Vinted')}
         ${ss.length ? `<button class="success small" data-act="bulkSeries" data-id="${esc(se.id)}">✓ Alle gekauft</button>` : ''}
         <button class="ghost small" data-act="addSeason" data-id="${esc(se.id)}">＋ Staffel</button>
-        <a class="btn ghost small" href="#/serie/${esc(se.id)}">Details</a>`,
+        <a class="btn ghost small" href="#/serie/${esc(se.id)}">✎ Bearbeiten</a>`,
       body: ss.length ? `<div class="cards">${ss.map(s => seasonPosterCard(se, s)).join('')}</div>` : '<p class="muted">Noch keine Staffeln angelegt.</p>'
     });
   }).join('');
@@ -648,7 +649,7 @@ function renderLibDyn() {
   if (!box) return;
   const q = UI.libQ.trim();
   const match = U.makeMatcher(q);
-  const mMatch = (m, frName = '') => match([m.title, m.originalTitle, m.year, m.genres, frName].join(' '));
+  const mMatch = (m, frName = '') => match([m.title, m.originalTitle, frName].join(' '), [m.year, m.genres].join(' '));
   const grid = items => `<div class="cards">${items.join('')}</div>`;
 
   // Filme: gekaufte Einzelfilme + vollständige Reihen (alphabetisch)
@@ -659,7 +660,7 @@ function renderLibDyn() {
     .filter(g => g.hit.length);
   // Serien: nur vollständige
   const fullSe = seriesSorted().map(se => ({ se, ss: seasonsOf(se.id) }))
-    .filter(x => gstat(x.ss) === 'complete' && match([x.se.name, x.se.originalName, x.se.year, x.se.genres].join(' ')));
+    .filter(x => gstat(x.ss) === 'complete' && match([x.se.name, x.se.originalName].join(' '), [x.se.year, x.se.genres].join(' ')));
 
   const filmCount = loose.length + fullFr.reduce((n, g) => n + g.hit.length, 0);
   let movies = '';
@@ -700,9 +701,8 @@ VIEWS.suche = function viewSearch(v, _, fresh) {
 function renderSearchDyn() {
   const box = $('#sDyn');
   if (!box) return;
-  const types = UI.types;
   const q = UI.q.trim(), match = U.makeMatcher(q);
-  const want = k => !types.size || types.has(k);
+  const want = k => UI.type === 'all' || UI.type === k || (UI.type === 'items' && (k === 'movie' || k === 'season'));
   const frStat = new Map(franchisesSorted().map(f => [f.id, gstat(moviesIn(f.id))]));
   const seStat = new Map(arr(S.series).map(se => [se.id, gstat(seasonsOf(se.id))]));
   const okItem = o => UI.status === 'all' || (UI.status === 'owned') === !!o;
@@ -715,31 +715,32 @@ function renderSearchDyn() {
   });
   if (want('series')) seriesSorted().forEach(se => {
     const st = seStat.get(se.id);
-    if (okGroup(st) && grp(st) && match([se.name, se.originalName, se.year, se.genres].join(' '))) items.push(seriesItem(se));
+    if (okGroup(st) && grp(st) && match([se.name, se.originalName].join(' '), [se.year, se.genres].join(' '))) items.push(seriesItem(se));
   });
   if (want('movie')) arr(S.movies).sort(byTitle).forEach(m => {
     const fid = frOf(m), fr = fid && S.franchises.get(fid);
     if (!okItem(m.owned)) return;
     if (UI.group !== 'all' && (!fid || !grp(frStat.get(fid)))) return;
-    if (q && !match([m.title, m.originalTitle, m.year, m.genres, fr?.name, m.format].join(' '))) return;
+    if (q && !match([m.title, m.originalTitle, fr?.name].join(' '), [m.year, m.genres, m.format].join(' '))) return;
     items.push(movieItem(m));
   });
   if (want('season')) seriesSorted().forEach(se => seasonsOf(se.id).forEach(s => {
     if (!okItem(s.owned)) return;
     if (UI.group !== 'all' && !grp(seStat.get(se.id))) return;
-    if (q && !match([se.name, 'staffel ' + s.number, 's' + s.number, s.name, s.year].join(' '))) return;
+    if (q && !match([se.name, 'staffel ' + s.number, s.name].join(' '), ['s' + s.number, s.year].join(' '))) return;
     items.push(seasonItem(s));
   }));
   const total = items.length, shown = items.slice(0, 400);
-  const isShop = UI.status === 'missing' && types.size === 2 && types.has('movie') && types.has('season');
-  const dirty = UI.q || types.size || UI.status !== 'all' || UI.group !== 'all';
-  box.innerHTML = `<div class="filter-panel">
-      <div class="fp-row"><span class="fp-label">Typ</span><div class="chips">${[['movie', 'Filme'], ['franchise', 'Franchises'], ['series', 'Serien'], ['season', 'Staffeln']].map(([k, l]) => `<button class="chip ${types.has(k) ? 'active' : ''}" data-act="searchType" data-val="${k}">${l}</button>`).join('')}</div></div>
-      <div class="fp-row"><span class="fp-label">Status</span>${chips('status', [['all', 'Alle'], ['owned', 'Gekauft'], ['missing', 'Fehlt noch']])}</div>
-      <div class="fp-row"><span class="fp-label">Reihe / Serie</span>${chips('group', GROUP_OPTS)}</div>
-      <div class="fp-row"><button class="${isShop ? 'primary' : 'ghost'} small" data-act="shopping">🛒 Nur was mir fehlt</button>${dirty ? '<button class="link" data-act="resetSearch">Filter zurücksetzen</button>' : ''}</div>
+  const isShop = UI.status === 'missing' && UI.type === 'items';
+  const dirty = UI.q || UI.type !== 'all' || UI.status !== 'all' || UI.group !== 'all';
+  const sel = (key, opts) => `<select class="fsel ${UI[key] !== 'all' ? 'on' : ''}" data-filter="${key}" aria-label="${key}">${opts.map(([v, l]) => `<option value="${v}" ${UI[key] === v ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
+  box.innerHTML = `<div class="fbar">
+      ${sel('type', [['all', 'Alle Typen'], ['movie', 'Filme'], ['franchise', 'Franchises'], ['series', 'Serien'], ['season', 'Staffeln'], ['items', 'Filme & Staffeln']])}
+      ${sel('status', [['all', 'Jeder Status'], ['owned', 'Gekauft'], ['missing', 'Fehlt noch']])}
+      ${sel('group', [['all', 'Alle Reihen'], ['complete', 'Vollständige'], ['incomplete', 'Unvollständige']])}
+      <button class="chip ${isShop ? 'active' : ''}" data-act="shopping">🛒 Fehlt mir</button>
     </div>
-    <div class="result-count">${total} Treffer${total > shown.length ? ' (die ersten 400 werden angezeigt)' : ''}</div>
+    <div class="result-count">${total} Treffer${total > shown.length ? ' (die ersten 400 werden angezeigt)' : ''}${dirty ? ' · <button class="link" data-act="resetSearch">Zurücksetzen</button>' : ''}</div>
     ${shown.length ? `<div class="rows">${shown.map(itemRow).join('')}</div>` : empty('Keine Treffer.')}`;
 }
 
@@ -1544,14 +1545,13 @@ const A = {
   },
   toggleSort() { UI.sortMode = !UI.sortMode; renderView(false); },
   setFilter(d) { UI[d.key] = d.val; renderView(false); },
-  searchType(d) { UI.types.has(d.val) ? UI.types.delete(d.val) : UI.types.add(d.val); renderView(false); },
   shopping() {
-    UI.types = new Set(['movie', 'season']); UI.status = 'missing'; UI.group = 'all'; UI.q = '';
+    UI.type = 'items'; UI.status = 'missing'; UI.group = 'all'; UI.q = '';
     if (route().name !== 'suche') location.hash = '#/suche';
     else { const i = $('#sq'); if (i) i.value = ''; renderView(false); }
   },
   resetSearch() {
-    UI.types = new Set(); UI.status = 'all'; UI.group = 'all'; UI.q = '';
+    UI.type = 'all'; UI.status = 'all'; UI.group = 'all'; UI.q = '';
     const i = $('#sq'); if (i) i.value = '';
     renderView(false);
   },
@@ -1617,6 +1617,19 @@ document.addEventListener('click', e => {
 });
 document.addEventListener('keydown', e => {
   if ((e.key === 'Enter' || e.key === ' ') && e.target.matches?.('[role=button][data-act]')) { e.preventDefault(); e.target.click(); }
+});
+// iPhone: Während getippt wird, untere Leiste ausblenden (sonst schiebt die Tastatur sie nach oben)
+const TYPING = 'input:not([type=checkbox]):not([type=radio]):not([type=file]),textarea';
+document.addEventListener('focusin', e => { if (e.target.matches?.(TYPING)) document.body.classList.add('kb-open'); });
+document.addEventListener('focusout', () => setTimeout(() => {
+  if (!document.activeElement?.matches?.(TYPING)) document.body.classList.remove('kb-open');
+}, 80));
+// Kompakte Filter-Auswahlfelder
+document.addEventListener('change', e => {
+  const s = e.target.closest('[data-filter]');
+  if (!s) return;
+  UI[s.dataset.filter] = s.value;
+  renderView(false);
 });
 
 boot();

@@ -152,17 +152,24 @@ export function makeMatcher(query) {
   const qc = compact(query);
   if (!qc) return () => true;
   const qw = words(query);
-  return hay => {
-    const hc = compact(hay);
-    if (hc.includes(qc)) return true;
+  // hay = Titel (fehlertolerant), extra = Jahr/Genre/Reihe (nur exakt)
+  return (hay, extra = '') => {
+    const hc = compact(hay), all = hc + ' ' + compact(extra);
+    if (all.includes(qc)) return true;
     const hw = words(hay);
     const cand = [...hw];
     for (let i = 0; i < hw.length - 1; i++) cand.push(hw[i] + hw[i + 1]);
     return qw.every(w => {
-      if (hc.includes(w)) return true;
-      if (w.length < 4) return false;
+      if (all.includes(w)) return true;
+      if (w.length < 5) return false;
       const tol = w.length >= 8 ? 2 : 1;
-      return cand.some(h => dist(w, h, tol) <= tol || (h.length > w.length && dist(w, h.slice(0, w.length), tol) <= tol));
+      // Tippfehler nur gegen gleich lange oder längere Wörter prüfen
+      // (sonst wäre „land“ ein Tippfehler von „and“) – kurze Wörter müssen gleich anfangen.
+      return cand.some(h => {
+        if (h.length < w.length) return false;
+        if (w.length <= 6 && h[0] !== w[0]) return false;
+        return dist(w, h, tol) <= tol || (h.length > w.length && dist(w, h.slice(0, w.length), tol) <= tol);
+      });
     });
   };
 }
