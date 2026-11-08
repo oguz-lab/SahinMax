@@ -116,7 +116,20 @@ const configured = !!(firebaseConfig && firebaseConfig.apiKey && firebaseConfig.
 const demoFlag = () => { try { return sessionStorage.getItem('fv-demo') === '1'; } catch { return false; } };
 
 async function boot() {
-  if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('./sw.js').catch(() => {});
+  if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+    const hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.register('./sw.js').then(reg => {
+      // Beim Zurückholen der App (iPhone) nach neuer Version suchen
+      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg.update().catch(() => {}); });
+    }).catch(() => {});
+    // Neue Version aktiv → einmal neu laden (nicht mitten in einer Eingabe)
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!hadController || reloaded) return;
+      reloaded = true;
+      if (!U.hasModals() && !document.body.classList.contains('kb-open')) location.reload();
+    });
+  }
   // ?demo=1 erzwingt den lokalen Demo-Modus (nur Daten in diesem Browser, zum Ausprobieren)
   const forceDemo = new URLSearchParams(location.search).has('demo');
   if (!configured && !demoFlag() && !forceDemo) return renderSetup();
