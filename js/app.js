@@ -361,7 +361,7 @@ const NAV = [['', 'Start', '⌂'], ['filme', 'Filme', '🎬'], ['serien', 'Serie
 function renderShell() {
   $('#app').innerHTML = `
   <header class="topbar">
-    <a class="brand" href="#/"><span class="logo">▶</span><span>SahinMax</span></a>
+    <a class="brand" href="#/"><img class="logo-img" src="icons/logo-mark.png" alt=""><span>SahinMax</span></a>
     <nav class="nav" id="nav">${NAV.map(([r, l, i]) => `<a href="#/${r}" data-nav="${r}"><span class="ni" aria-hidden="true">${i}</span><span>${l}</span></a>`).join('')}</nav>
     <div class="top-actions">
       <button class="primary" data-act="add" aria-label="Hinzufügen">＋<span class="hide-sm"> Hinzufügen</span></button>
@@ -379,7 +379,7 @@ const displayUser = e => String(e || '').endsWith(USER_DOMAIN) ? e.slice(0, -USE
 
 function renderLogin() {
   $('#app').innerHTML = `<div class="auth-wrap"><form class="auth-card" id="loginForm">
-    <div class="logo big">▶</div><h1>SahinMax</h1><p class="muted">Deine private Film- und Serienverwaltung. Bitte melde dich an.</p>
+    <img class="logo-full" src="icons/logo-full.png" alt="SahinMax"><p class="muted">Deine private Film- und Serienverwaltung. Bitte melde dich an.</p>
     <div class="field"><label for="le">Benutzername oder E-Mail</label><input id="le" name="email" type="text" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required></div>
     <div class="field"><label for="lp">Passwort</label><input id="lp" name="password" type="password" autocomplete="current-password" required></div>
     <button class="primary full" type="submit">Anmelden</button>
@@ -414,7 +414,7 @@ function renderLogin() {
 
 function renderSetup() {
   $('#app').innerHTML = `<div class="auth-wrap"><div class="auth-card">
-    <div class="logo big">▶</div><h1>SahinMax einrichten</h1>
+    <img class="logo-full" src="icons/logo-full.png" alt="SahinMax"><h1>Einrichten</h1>
     <p class="muted">Die Verbindung zur Datenbank ist noch nicht eingetragen. Trage die Werte deines Firebase-Projekts in die Datei <code>firebase-config.js</code> ein. Die Schritt-für-Schritt-Anleitung steht in der <code>README.md</code>.</p>
     <button class="primary full" id="demoBtn">Demo ansehen (Daten nur in diesem Browser)</button>
   </div></div>`;

@@ -1,11 +1,11 @@
 // Service Worker: macht die App installierbar und offline startfähig.
 // Eigene Dateien: erst Netzwerk (damit Updates sofort ankommen), sonst Cache.
 // Firebase-SDK (versioniert): erst Cache.
-const VERSION = 'fv-v6';
+const VERSION = 'fv-v7';
 const SHELL = [
   './', './index.html', './css/styles.css', './js/app.js', './js/util.js', './js/tmdb.js',
   './firebase-config.js', './manifest.webmanifest',
-  './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png'
+  './icons/logo-mark.png', './icons/logo-full.png', './icons/favicon-64.png', './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png'
 ];
 
 self.addEventListener('install', e => {
