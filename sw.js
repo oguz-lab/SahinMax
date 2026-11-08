@@ -1,7 +1,7 @@
 // Service Worker: macht die App installierbar und offline startfähig.
 // Eigene Dateien: erst Netzwerk (damit Updates sofort ankommen), sonst Cache.
 // Firebase-SDK (versioniert): erst Cache.
-const VERSION = 'fv-v8';
+const VERSION = 'fv-v9';
 const SHELL = [
   './', './index.html', './css/styles.css', './js/app.js', './js/util.js', './js/tmdb.js',
   './firebase-config.js', './manifest.webmanifest',

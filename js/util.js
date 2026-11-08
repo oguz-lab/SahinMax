@@ -26,10 +26,10 @@ export function toast(msg, type = 'ok') {
 // ── Modals ───────────────────────────────────────────────────
 const stack = [];
 
-export function openModal({ title = '', body = '', footer = '', wide = false, onClose = null } = {}) {
+export function openModal({ title = '', body = '', footer = '', wide = false, cls = '', onClose = null } = {}) {
   const el = document.createElement('div');
   el.className = 'modal-backdrop';
-  el.innerHTML = `<div class="modal${wide ? ' wide' : ''}" role="dialog" aria-modal="true" aria-label="${esc(title)}">
+  el.innerHTML = `<div class="modal${wide ? ' wide' : ''} ${cls}" role="dialog" aria-modal="true" aria-label="${esc(title || 'Details')}">
     <div class="modal-head"><h2>${esc(title)}</h2><button type="button" class="icon-btn" data-close aria-label="Schließen">✕</button></div>
     <div class="modal-body">${body}</div>
     <div class="modal-actions${footer ? '' : ' hidden'}">${footer}</div>

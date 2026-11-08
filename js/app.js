@@ -239,6 +239,28 @@ const vMovie = m => vintedUrl(m.title + (S.settings.vintedYear !== false && m.ye
 const vSeason = (se, s) => vintedUrl(`${se.name} Staffel ${s.number}`);
 const vintedBtn = (url, label = 'Auf Vinted suchen', cls = '') => `<a class="btn vinted small ${cls}" href="${esc(url)}" target="_blank" rel="noopener">${esc(label)} ↗</a>`;
 const imdbBtn = id => id ? `<a class="btn ghost small" href="https://www.imdb.com/title/${esc(id)}/" target="_blank" rel="noopener">IMDb ↗</a>` : '';
+// Kompaktes Vinted-Symbol (Einkaufstüte) für Listen und Cover
+const BAG = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.5 8h13l-1 12.5h-11z"/><path d="M9 8V6.5a3 3 0 0 1 6 0V8"/></svg>';
+const vintedIcon = (url, cls = '') => `<a class="v-icon ${cls}" href="${esc(url)}" target="_blank" rel="noopener" aria-label="Auf Vinted suchen" title="Auf Vinted suchen">${BAG}</a>`;
+const ownBadge = owned => owned ? '<span class="own-badge" title="Gekauft" aria-label="Gekauft"></span>' : '';
+// Fortschrittsring (z. B. 3/5)
+function ring(own, total, size = 44, label = `${own}/${total}`) {
+  const r = (size - 6) / 2, c = 2 * Math.PI * r, p = total ? own / total : 0;
+  return `<span class="ring" style="width:${size}px;height:${size}px" role="img" aria-label="${own} von ${total}">
+    <svg viewBox="0 0 ${size} ${size}">
+    <circle cx="${size / 2}" cy="${size / 2}" r="${r}" class="ring-bg"/><circle cx="${size / 2}" cy="${size / 2}" r="${r}" class="ring-fg" stroke-dasharray="${(c * p).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 ${size / 2} ${size / 2})"/></svg>
+    <b>${esc(label)}</b></span>`;
+}
+// Unscharfes Hintergrundbild für Detailansichten
+const bgLayer = (url, cls = 'blur-bg') => { url = safeUrl(url); return url ? `<div class="${cls}" style="background-image:url(&quot;${esc(url.replace(/"/g, '%22'))}&quot;)"></div>` : ''; };
+
+// Hintergrundbilder (Szenenbilder) bei Bedarf einmalig von TMDb nachladen
+const triedBackdrop = new Set();
+function ensureBackdrop(col, item) {
+  if (!item || item.backdrop || !item.tmdbId || !T.hasTmdb() || triedBackdrop.has(item.id)) return;
+  triedBackdrop.add(item.id);
+  T.backdropFor(col === 'series' ? 'tv' : 'movie', item.tmdbId).then(b => { if (b) run([setOp(col, item.id, { backdrop: b })]); }).catch(() => {});
+}
 const fmtRuntime = m => { m = intOrNull(m); if (!m) return ''; return m >= 60 ? `${Math.floor(m / 60)} Std. ${m % 60} Min.` : `${m} Min.`; };
 const fmtPrice = p => num(p) == null ? '' : num(p).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
 const fmtDate = d => { if (!d) return ''; const x = new Date(d); return isNaN(x) ? String(d) : x.toLocaleDateString('de-DE'); };
@@ -255,24 +277,24 @@ function checkBtn(act, id, owned, cls = '') {
   return `<button class="check ${owned ? 'on' : ''} ${cls}" data-act="${act}" data-id="${esc(id)}" aria-pressed="${owned}" title="${owned ? 'Gekauft – antippen, um als fehlend zu markieren' : 'Noch nicht gekauft – antippen zum Abhaken'}"><span class="cb" aria-hidden="true"></span><span class="cl">Gekauft</span></button>`;
 }
 
+// Cover-Karte: Antippen = Details, lange drücken = gekauft/fehlt umschalten.
+// Gekauft = farbig mit grünem Haken, fehlt = ausgegraut mit Vinted-Symbol.
 function movieCard(m, sort = false) {
   const meta = [m.year, m.format].filter(Boolean).join(' · ');
-  return `<article class="card ${m.owned ? 'owned' : 'missing'}" data-act="openMovie" data-id="${esc(m.id)}" role="button" tabindex="0">
-    <div class="card-media">${poster(m.poster, m.title)}
-      ${checkBtn('toggleMovie', m.id, m.owned, 'pill')}
+  return `<article class="card ${m.owned ? 'owned' : 'missing'}" data-act="openMovie" data-long="toggleMovie" data-id="${esc(m.id)}" role="button" tabindex="0">
+    <div class="card-media">${poster(m.poster, m.title)}${ownBadge(m.owned)}
+      ${m.owned ? '' : vintedIcon(vMovie(m), 'on-cover')}
       ${m.order != null && frOf(m) ? `<span class="order">${esc(m.order)}</span>` : ''}
     </div>
     <div class="card-body"><h3>${esc(m.title)}</h3><div class="meta">${esc(meta)}</div>
-      ${m.owned && !sort ? '' : `<div class="card-actions">${m.owned ? '' : vintedBtn(vMovie(m), 'Vinted')}${sort ? `<button class="ghost small" data-act="moveMovie" data-id="${esc(m.id)}" data-dir="-1" aria-label="Nach vorne">◀</button><button class="ghost small" data-act="moveMovie" data-id="${esc(m.id)}" data-dir="1" aria-label="Nach hinten">▶</button>` : ''}</div>`}
+      ${sort ? `<div class="card-actions"><button class="ghost small" data-act="moveMovie" data-id="${esc(m.id)}" data-dir="-1" aria-label="Nach vorne">◀</button><button class="ghost small" data-act="moveMovie" data-id="${esc(m.id)}" data-dir="1" aria-label="Nach hinten">▶</button></div>` : ''}
     </div></article>`;
 }
 
 function seasonPosterCard(se, s) {
-  return `<article class="card ${s.owned ? 'owned' : 'missing'}" data-act="editSeason" data-id="${esc(s.id)}" role="button" tabindex="0">
-    <div class="card-media">${poster(s.poster || se.poster, 'S' + s.number)}${checkBtn('toggleSeason', s.id, s.owned, 'pill')}</div>
-    <div class="card-body"><h3>Staffel ${esc(s.number)}</h3><div class="meta">${esc([s.name, s.year].filter(Boolean).join(' · ')) || '&nbsp;'}</div>
-      ${s.owned ? '' : `<div class="card-actions">${vintedBtn(vSeason(se, s), 'Vinted')}</div>`}
-    </div></article>`;
+  return `<article class="card ${s.owned ? 'owned' : 'missing'}" data-act="openSeason" data-long="toggleSeason" data-id="${esc(s.id)}" role="button" tabindex="0">
+    <div class="card-media">${poster(s.poster || se.poster, 'S' + s.number)}${ownBadge(s.owned)}${s.owned ? '' : vintedIcon(vSeason(se, s), 'on-cover')}</div>
+    <div class="card-body"><h3>Staffel ${esc(s.number)}</h3><div class="meta">${esc([s.name, s.year].filter(Boolean).join(' · ')) || '&nbsp;'}</div></div></article>`;
 }
 
 // Mehrere Cover nebeneinander als Vorschaubild
@@ -323,7 +345,7 @@ function itemRow(it) {
   const open = it.open ? ` data-act="${it.open}" data-id="${esc(it.id)}" role="button" tabindex="0"` : '';
   return `<div class="row-item ${it.owned === true ? 'owned' : it.owned === false ? 'missing' : ''}">
     <${tag} class="row-main"${open}>${poster(it.img, it.thumbTitle || it.title, 'thumb')}<div class="row-text"><div class="row-title">${esc(it.title)}</div><div class="row-sub">${it.sub}</div></div></${it.href ? 'a' : 'div'}>
-    <div class="row-actions">${it.vinted ? vintedBtn(it.vinted, 'Vinted') : ''}${it.toggle ? checkBtn(it.toggle, it.id, it.owned) : ''}</div>
+    <div class="row-actions">${it.vinted ? vintedIcon(it.vinted) : ''}${it.toggle ? checkBtn(it.toggle, it.id, it.owned) : ''}</div>
   </div>`;
 }
 
@@ -362,7 +384,8 @@ function renderShell() {
   document.body.classList.remove('kb-open');
   $('#app').innerHTML = `
   <header class="topbar">
-    <a class="brand" href="#/"><img class="logo-img" src="icons/logo-mark.png" alt=""><span>SahinMax</span></a>
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><linearGradient id="rg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#e14cff"/><stop offset=".5" stop-color="#7b3bff"/><stop offset="1" stop-color="#18d8ff"/></linearGradient></defs></svg>
+    <a class="brand" href="#/"><img class="logo-img" src="icons/logo-mark.png" alt=""><span>Sahin<span class="grad-t">Max</span></span></a>
     <nav class="nav" id="nav">${NAV.map(([r, l, i]) => `<a href="#/${r}" data-nav="${r}"><span class="ni" aria-hidden="true">${i}</span><span>${l}</span></a>`).join('')}</nav>
     <div class="top-actions">
       <button class="primary" data-act="add" aria-label="Hinzufügen">＋<span class="hide-sm"> Hinzufügen</span></button>
@@ -468,7 +491,7 @@ function renderView(force) {
   const key = location.hash || '#/';
   const fresh = force || key !== lastKey;
   lastKey = key;
-  const navKey = { franchise: 'filme', serie: 'serien' }[r.name] ?? r.name;
+  const navKey = { franchise: 'filme', serie: 'serien', statistik: '' }[r.name] ?? r.name;
   document.querySelectorAll('[data-nav]').forEach(a => a.classList.toggle('active', a.dataset.nav === navKey));
   renderBanner();
   if (S.error) {
@@ -506,30 +529,48 @@ VIEWS[''] = function viewHome(v) {
       <div class="actions"><button class="primary" data-act="loadStartData">⬇ Meine Sammlung übernehmen</button><button class="ghost" data-act="add">＋ Selbst anlegen</button><a class="btn ghost" href="#/einstellungen">Backup importieren</a></div></div></section>`;
     return;
   }
-  const stats = [[ms.length, 'Filme gesamt'], [mo, 'Filme gekauft'], [ms.length - mo, 'Filme fehlen'], [S.franchises.size, 'Franchises'],
-    [S.series.size, 'Serien'], [so, 'Staffeln gekauft'], [ss.length - so, 'Staffeln fehlen']];
+  // Großes Titelbild: zuletzt gekaufter Film
+  const ownedAt = x => x.ownedAt || x.updatedAt || x.createdAt || 0;
+  const recent = ms.filter(m => m.owned).sort((a, b) => ownedAt(b) - ownedAt(a));
+  const feat = recent[0] || ms[0];
+  ensureBackdrop('movies', feat);
+  const featFr = feat && frOf(feat) && S.franchises.get(feat.franchiseId);
 
-  const groups = [
-    ...franchisesSorted().map(f => { const it = moviesIn(f.id); return { href: '#/franchise/' + f.id, name: f.name, covers: coversOf(it, f.image), it, unit: 'Filme' }; }),
-    ...seriesSorted().map(se => { const it = seasonsOf(se.id); return { href: '#/serie/' + se.id, name: se.name, covers: [...new Set(it.map(s => s.poster || se.poster))].filter(Boolean), it, unit: 'Staffeln' }; })
-  ].filter(g => gstat(g.it) === 'partial').sort((a, b) => ratio(b.it) - ratio(a.it)).slice(0, 6);
-
+  // Wisch-Reihe: Als Nächstes kaufen (Reihen, die schon fast komplett sind, zuerst)
   const next = [];
   franchisesSorted().forEach(f => {
     const it = moviesIn(f.id);
-    if (gstat(it) === 'partial') it.filter(m => !m.owned).forEach(m => next.push({ r: ratio(it), item: movieItem(m) }));
+    if (gstat(it) === 'partial') it.filter(m => !m.owned).forEach(m => next.push({ r: ratio(it), html: movieCard(m) }));
   });
   seriesSorted().forEach(se => {
     const it = seasonsOf(se.id);
-    if (gstat(it) === 'partial') next.push({ r: ratio(it), item: seasonItem(it.find(s => !s.owned)) });
+    if (gstat(it) === 'partial') { const s = it.find(x => !x.owned); next.push({ r: ratio(it), html: seasonPosterCard(se, s).replace('<h3>Staffel', `<h3>${esc(se.name)} · Staffel`) }); }
   });
   next.sort((a, b) => b.r - a.r);
 
-  v.innerHTML = `<section class="hero"><div><div class="eyebrow">Deine persönliche Sammlung</div><h1>Alles im Blick.<br>Kein Film vergessen.</h1>
-      <p>Markiere gekaufte Titel und springe für fehlende Filme und Staffeln direkt zur Vinted-Suche.</p></div>
-      <div class="stats">${stats.map(([n, l]) => `<div class="stat"><strong>${n}</strong><span>${l}</span></div>`).join('')}</div></section>
-    ${next.length ? `<section class="section"><div class="section-head"><h2>Als Nächstes kaufen</h2><button class="link" data-act="shopping">Ganze Einkaufsliste →</button></div><div class="rows">${next.slice(0, 8).map(n => itemRow(n.item)).join('')}</div></section>` : ''}
-    ${groups.length ? `<section class="section"><div class="section-head"><h2>Fast komplett</h2></div><div class="tiles">${groups.map(g => groupTile(g.href, g.name, g.covers, g.it, g.unit)).join('')}</div></section>` : ''}`;
+  // Wisch-Reihe: Fast komplett
+  const groups = [
+    ...franchisesSorted().map(f => { const it = moviesIn(f.id); return { href: '#/franchise/' + f.id, name: f.name, cover: coversOf(it, f.image)[0], it }; }),
+    ...seriesSorted().map(se => ({ href: '#/serie/' + se.id, name: se.name, cover: se.poster, it: seasonsOf(se.id) }))
+  ].filter(g => gstat(g.it) === 'partial').sort((a, b) => ratio(b.it) - ratio(a.it)).slice(0, 12);
+
+  const items = ms.length + ss.length, done = mo + so, pct = items ? Math.round(done / items * 100) : 0;
+  const shelf = (title, cards, link = '') => cards.length ? `<section class="shelf"><div class="section-head"><h2>${title}</h2>${link}</div><div class="shelf-row">${cards.join('')}</div></section>` : '';
+
+  v.innerHTML = `${feat ? `<section class="feature">${bgLayer(feat.backdrop || feat.poster, 'feature-bg' + (feat.backdrop ? '' : ' soft'))}
+      <div class="feature-body">
+        <div class="eyebrow">${recent.length ? 'Zuletzt gekauft' : 'Aus deiner Sammlung'}</div>
+        <h1>${esc(feat.title)}</h1>
+        <div class="feature-meta">${esc([feat.year, featFr?.name, (feat.genres || '').split(',')[0]].filter(Boolean).join(' · '))}</div>
+        <div class="actions"><button class="primary" data-act="openMovie" data-id="${esc(feat.id)}">Details</button><a class="btn ghost" href="#/mediathek">Zur Mediathek</a></div>
+      </div></section>` : ''}
+    <a class="ring-strip" href="#/statistik">${ring(done, items, 56, pct + '%')}
+      <span class="rs-text"><strong>${pct} % deiner Sammlung komplett</strong><span>${mo} von ${ms.length} Filmen · ${so} von ${ss.length} Staffeln</span></span>
+      <span class="rs-more">Statistik ›</span></a>
+    ${shelf('Zuletzt gekauft', recent.slice(0, 15).map(m => movieCard(m)), '<a class="link" href="#/mediathek">Alle ›</a>')}
+    ${shelf('Als Nächstes kaufen', next.slice(0, 15).map(n => n.html), '<button class="link" data-act="shopping">Einkaufsliste ›</button>')}
+    ${shelf('Fast komplett', groups.map(g => `<a class="card shelf-group" href="${g.href}"><div class="card-media">${poster(g.cover, g.name)}${ring(ownedCount(g.it), g.it.length, 40)}</div><div class="card-body"><h3>${esc(g.name)}</h3><div class="meta">${ownedCount(g.it)} von ${g.it.length}</div></div></a>`))}
+    <p class="hint-line">Tipp: Cover <strong>lange drücken</strong>, um einen Film schnell als gekauft abzuhaken.</p>`;
 };
 
 // Reiter „Filme“ = Wunschliste: fehlende Einzelfilme + unvollständige Reihen.
@@ -569,8 +610,10 @@ VIEWS.franchise = function viewFranchise(v, id) {
   const list = all.filter(m => UI.franchiseFilm === 'all' || (UI.franchiseFilm === 'owned') === !!m.owned);
   const sort = UI.sortMode && UI.franchiseFilm === 'all' && !pseudo;
   const back = st === 'complete' && !pseudo ? ['#/mediathek', 'Mediathek'] : ['#/filme', 'Filme'];
+  const bgMovie = all.find(m => m.backdrop) || all[0];
+  if (!pseudo) ensureBackdrop('movies', bgMovie);
   v.innerHTML = `<a class="back" href="${back[0]}">← ${back[1]}</a>
-    <section class="dhero">${collage(coversOf(all, f.image), f.name, 'dhero-art')}<div class="dhero-body">
+    <section class="dhero">${bgLayer(bgMovie?.backdrop || bgMovie?.poster || f.image)}${collage(coversOf(all, f.image), f.name, 'dhero-art')}<div class="dhero-body">
       <div class="eyebrow">${pseudo ? 'Sammlung' : 'Franchise'}</div><h1>${esc(f.name)}</h1>
       <div class="dhero-meta">${badge(st)}<span>${own} von ${all.length} Filmen gekauft</span></div>${progress(own, all.length)}
       ${f.desc ? `<p class="desc">${esc(f.desc)}</p>` : ''}
@@ -611,8 +654,9 @@ VIEWS.serie = function viewSerie(v, id) {
   if (!se) { v.innerHTML = empty('Diese Serie gibt es nicht (mehr).', '<a class="btn ghost" href="#/serien">← Zu den Serien</a>'); return; }
   const ss = seasonsOf(id), st = gstat(ss), own = ownedCount(ss);
   const list = ss.filter(s => UI.seriesSeason === 'all' || (UI.seriesSeason === 'owned') === !!s.owned);
+  ensureBackdrop('series', se);
   v.innerHTML = `<a class="back" href="${st === 'complete' ? '#/mediathek">← Mediathek' : '#/serien">← Serien'}</a>
-    <section class="dhero">${poster(se.backdrop || se.poster, se.name, 'dhero-art')}<div class="dhero-body">
+    <section class="dhero">${bgLayer(se.backdrop || se.poster)}${poster(se.backdrop || se.poster, se.name, 'dhero-art')}<div class="dhero-body">
       <div class="eyebrow">Serie${se.year ? ' · ' + esc(se.year) : ''}</div><h1>${esc(se.name)}</h1>
       ${se.originalName && se.originalName !== se.name ? `<div class="muted">${esc(se.originalName)}</div>` : ''}
       <div class="dhero-meta">${badge(st)}<span>${own} von ${ss.length} Staffeln gekauft</span>${ratings(se)}</div>${progress(own, ss.length)}
@@ -758,6 +802,58 @@ function renderSearchDyn() {
     ${shown.length ? `<div class="rows">${shown.map(itemRow).join('')}</div>` : empty('Keine Treffer.')}`;
 }
 
+// ── Statistik ────────────────────────────────────────────────
+// Einfarbige Balken mit direkten Werten (eine Datenreihe je Diagramm → keine Legende nötig).
+function barList(rows, { fmt = n => n, max } = {}) {
+  if (!rows.length) return '<p class="muted small-t">Noch keine Daten.</p>';
+  const top = max ?? Math.max(...rows.map(r => r[1]), 1);
+  return `<div class="bars" role="table">${rows.map(([label, val, hint]) => `<div class="bar-row" role="row" title="${esc(label)}: ${esc(fmt(val))}${hint ? ' · ' + esc(hint) : ''}">
+      <span class="bar-label" role="cell">${esc(label)}</span>
+      <span class="bar-track" role="cell"><span class="bar-fill" style="width:${Math.max(2, Math.round(val / top * 100))}%"></span></span>
+      <span class="bar-val" role="cell">${esc(fmt(val))}</span></div>`).join('')}</div>`;
+}
+
+VIEWS.statistik = function viewStats(v) {
+  const ms = arr(S.movies), ss = arr(S.seasons).filter(s => S.series.has(s.seriesId));
+  const om = ms.filter(m => m.owned), os = ss.filter(s => s.owned);
+  const frs = franchisesSorted().map(f => gstat(moviesIn(f.id)));
+  const ses = arr(S.series).map(se => gstat(seasonsOf(se.id)));
+  const pct = (a, b) => b ? Math.round(a / b * 100) : 0;
+  const tile = (n, total, label) => `<div class="stat-tile">${ring(n, total, 64, pct(n, total) + '%')}<div><strong>${n} <small>von ${total}</small></strong><span>${label}</span></div></div>`;
+
+  // Ausgaben
+  const paid = [...om, ...os].filter(x => num(x.price) != null);
+  const sum = paid.reduce((a, x) => a + num(x.price), 0);
+  const months = new Map();
+  paid.filter(x => x.purchaseDate).forEach(x => { const k = String(x.purchaseDate).slice(0, 7); months.set(k, (months.get(k) || 0) + num(x.price)); });
+  const monthRows = [...months.entries()].sort((a, b) => b[0].localeCompare(a[0])).slice(0, 12)
+    .map(([k, val]) => [new Date(k + '-01').toLocaleDateString('de-DE', { month: 'short', year: 'numeric' }), val]);
+
+  // Genres, Jahrzehnte, Formate (nur gekaufte Filme)
+  const count = list => { const m = new Map(); list.forEach(k => m.set(k, (m.get(k) || 0) + 1)); return [...m.entries()]; };
+  const genres = count(om.flatMap(m => String(m.genres || '').split(',').map(g => g.trim()).filter(Boolean))).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  const decades = count(om.filter(m => intOrNull(m.year)).map(m => Math.floor(intOrNull(m.year) / 10) * 10)).sort((a, b) => a[0] - b[0]).map(([d, n]) => [`${d}er`, n]);
+  const formats = count(om.map(m => m.format || 'Ohne Angabe')).sort((a, b) => b[1] - a[1]);
+
+  v.innerHTML = `<a class="back" href="#/">← Start</a>
+    ${pageHead('Statistik', 'Deine Sammlung in Zahlen.')}
+    <div class="stat-tiles">
+      ${tile(om.length, ms.length, 'Filme gekauft')}
+      ${tile(os.length, ss.length, 'Staffeln gekauft')}
+      ${tile(frs.filter(s => s === 'complete').length, frs.length, 'Reihen vollständig')}
+      ${tile(ses.filter(s => s === 'complete').length, ses.length, 'Serien vollständig')}
+    </div>
+    <div class="stat-grid">
+      <section class="panel"><h3>Ausgaben</h3>
+        <div class="big-num">${fmtPrice(sum) || '0,00 €'}</div>
+        <p class="muted small-t">${paid.length ? `für ${paid.length} Titel mit Preis · Ø ${fmtPrice(sum / paid.length)}` : 'Trag beim Bearbeiten eines Films Kaufpreis und Kaufdatum ein, dann erscheinen hier deine Ausgaben.'}</p>
+        ${monthRows.length ? `<h4>Pro Monat</h4>${barList(monthRows, { fmt: fmtPrice })}` : ''}</section>
+      <section class="panel"><h3>Lieblingsgenres</h3>${barList(genres)}</section>
+      <section class="panel"><h3>Filme pro Jahrzehnt</h3>${barList(decades)}</section>
+      <section class="panel"><h3>Formate</h3>${barList(formats)}</section>
+    </div>`;
+};
+
 // ── Einstellungen ────────────────────────────────────────────
 VIEWS.einstellungen = function viewSettings(v, _, fresh) {
   if (fresh || !$('#setDyn')) {
@@ -801,29 +897,60 @@ function openMovie(id) {
     if (!m) return null;
     const fid = frOf(m), fr = fid && S.franchises.get(fid);
     const buy = [m.purchaseDate ? 'am ' + fmtDate(m.purchaseDate) : '', m.price != null && m.price !== '' ? 'für ' + fmtPrice(m.price) : ''].filter(Boolean).join(' ');
-    return `<div class="detail">${poster(m.poster, m.title, 'poster detail-poster')}<div class="detail-info">
-      <div class="eyebrow">${fr ? `<a href="#/franchise/${esc(fr.id)}">${esc(fr.name)}</a>${m.order != null ? ' · Teil ' + esc(m.order) : ''}` : 'Einzelner Film'}</div>
-      <h2 class="detail-title">${esc(m.title)}</h2>
-      ${m.originalTitle && m.originalTitle !== m.title ? `<div class="muted">${esc(m.originalTitle)}</div>` : ''}
-      <div class="meta-line">${esc([m.year, fmtRuntime(m.runtime), m.genres].filter(Boolean).join(' · '))}</div>
-      <div class="ratings">${ratings(m)}${m.format ? `<span class="rating">${esc(m.format)}</span>` : ''}</div>
-      <p class="desc">${esc(m.desc || 'Keine Beschreibung hinterlegt.')}</p>
-      ${m.owned && buy ? `<div class="purchase">Gekauft ${esc(buy)}</div>` : ''}
-      ${m.notes ? `<div class="notes"><strong>Notizen</strong><br>${esc(m.notes)}</div>` : ''}
-      <div class="detail-actions">
-        ${checkBtn('toggleMovie', m.id, m.owned, 'big')}
-        ${m.owned ? '' : vintedBtn(vMovie(m))}${imdbBtn(m.imdbId)}
-      </div>
-      <div class="detail-actions">
-        <button class="ghost small" data-act="editMovie" data-id="${esc(m.id)}">✎ Bearbeiten</button>
+    ensureBackdrop('movies', m);
+    return mediaDetail({
+      bg: m.backdrop || m.poster, soft: !m.backdrop, poster: m.poster, title: m.title,
+      eyebrow: fr ? `<a href="#/franchise/${esc(fr.id)}">${esc(fr.name)}</a>${m.order != null ? ' · Teil ' + esc(m.order) : ''}` : 'Einzelner Film',
+      sub: m.originalTitle && m.originalTitle !== m.title ? m.originalTitle : '',
+      meta: [m.year, fmtRuntime(m.runtime), m.genres].filter(Boolean).join(' · '),
+      chips: `${ratings(m)}${m.format ? `<span class="rating">${esc(m.format)}</span>` : ''}`,
+      main: `${checkBtn('toggleMovie', m.id, m.owned, 'big')}${m.owned ? '' : vintedBtn(vMovie(m))}${imdbBtn(m.imdbId)}`,
+      body: `<p class="desc">${esc(m.desc || 'Keine Beschreibung hinterlegt.')}</p>
+        ${m.owned && buy ? `<div class="purchase">Gekauft ${esc(buy)}</div>` : ''}
+        ${m.notes ? `<div class="notes"><strong>Notizen</strong><br>${esc(m.notes)}</div>` : ''}`,
+      more: `<button class="ghost small" data-act="editMovie" data-id="${esc(m.id)}">✎ Bearbeiten</button>
         ${m.tmdbId && T.hasTmdb() ? `<button class="ghost small" data-act="refreshMovie" data-id="${esc(m.id)}">↻ Infos aktualisieren</button>` : ''}
-        <button class="danger small" data-act="deleteMovie" data-id="${esc(m.id)}">Löschen</button>
-      </div></div></div>`;
+        <button class="danger small" data-act="deleteMovie" data-id="${esc(m.id)}">Löschen</button>`
+    });
   };
+  openMedia(build);
+}
+
+// Gemeinsames Layout: großes (unscharfes) Szenenbild oben, Poster + Infos darüber
+function mediaDetail({ bg, soft, poster: p, title, eyebrow, sub, meta, chips: ch, main, body, more }) {
+  return `<div class="media">
+    <div class="media-hero">${bgLayer(bg, 'media-bg' + (soft ? ' soft' : ''))}<div class="media-fade"></div></div>
+    <div class="media-head">${poster(p, title, 'poster media-poster')}
+      <div class="media-titles"><div class="eyebrow">${eyebrow}</div><h2>${esc(title)}</h2>${sub ? `<div class="muted">${esc(sub)}</div>` : ''}
+        <div class="meta-line">${esc(meta)}</div>${ch ? `<div class="ratings">${ch}</div>` : ''}</div></div>
+    <div class="media-main">${main}</div>
+    <div class="media-body">${body}</div>
+    <div class="media-more">${more}</div>
+  </div>`;
+}
+function openMedia(build) {
   const html = build();
   if (!html) return;
-  const md = openModal({ title: 'Film', body: html, wide: true });
+  const md = openModal({ title: '', body: html, wide: true, cls: 'media-modal' });
   md.refresh = () => { const h = build(); if (h === null) md.close(); else md.setBody(h); };
+}
+
+function openSeason(id) {
+  const build = () => {
+    const s = S.seasons.get(id), se = s && S.series.get(s.seriesId);
+    if (!s || !se) return null;
+    ensureBackdrop('series', se);
+    const buy = [s.purchaseDate ? 'am ' + fmtDate(s.purchaseDate) : '', s.price != null && s.price !== '' ? 'für ' + fmtPrice(s.price) : ''].filter(Boolean).join(' ');
+    return mediaDetail({
+      bg: se.backdrop || s.poster || se.poster, soft: !se.backdrop, poster: s.poster || se.poster, title: `Staffel ${s.number}`,
+      eyebrow: `<a href="#/serie/${esc(se.id)}">${esc(se.name)}</a>`, sub: s.name,
+      meta: [s.year, s.episodes ? s.episodes + ' Folgen' : ''].filter(Boolean).join(' · '), chips: '',
+      main: `${checkBtn('toggleSeason', s.id, s.owned, 'big')}${s.owned ? '' : vintedBtn(vSeason(se, s))}`,
+      body: `${s.owned && buy ? `<div class="purchase">Gekauft ${esc(buy)}</div>` : ''}${s.notes ? `<div class="notes"><strong>Notizen</strong><br>${esc(s.notes)}</div>` : ''}`,
+      more: `<button class="ghost small" data-act="editSeason" data-id="${esc(s.id)}">✎ Bearbeiten</button><a class="btn ghost small" href="#/serie/${esc(se.id)}">Zur Serie</a>`
+    });
+  };
+  openMedia(build);
 }
 
 // ═════════════════════════════════════════════════════════════
@@ -1463,6 +1590,7 @@ const A = {
   addSeries: () => seriesForm(),
   addSeason: d => seasonForm(d.id),
   openMovie: d => openMovie(d.id),
+  openSeason: d => openSeason(d.id),
   editMovie: d => { const m = S.movies.get(d.id); if (m) movieForm(m); },
   editFranchise: d => { const f = S.franchises.get(d.id); if (f) franchiseForm(f); },
   editSeries: d => { const s = S.series.get(d.id); if (s) seriesForm(s); },
@@ -1479,7 +1607,7 @@ const A = {
     if (!m) return;
     const fid = frOf(m);
     const completes = !m.owned && fid && moviesIn(fid).every(x => x.id === m.id || x.owned);
-    run([setOp('movies', m.id, { owned: !m.owned })]);
+    run([setOp('movies', m.id, m.owned ? { owned: false } : { owned: true, ownedAt: Date.now() })]);
     if (m.owned) toast(`„${m.title}“ als fehlend markiert`);
     else if (completes) toast(`🎉 „${S.franchises.get(fid).name}“ ist vollständig – jetzt in deiner Mediathek`);
     else if (!fid) toast(`„${m.title}“ gekauft – jetzt in deiner Mediathek`);
@@ -1490,7 +1618,7 @@ const A = {
     if (!s) return;
     const se = S.series.get(s.seriesId);
     const completes = !s.owned && seasonsOf(s.seriesId).every(x => x.id === s.id || x.owned);
-    run([setOp('seasons', s.id, { owned: !s.owned })]);
+    run([setOp('seasons', s.id, s.owned ? { owned: false } : { owned: true, ownedAt: Date.now() })]);
     if (completes) toast(`🎉 „${se?.name}“ ist vollständig – jetzt in deiner Mediathek`);
     else toast(`${se?.name || 'Serie'} – Staffel ${s.number}: ${s.owned ? 'fehlt' : 'gekauft'}`);
   },
@@ -1517,7 +1645,7 @@ const A = {
     const ms = moviesIn(d.id);
     const target = !ms.every(m => m.owned);
     if (!await confirmDialog(`Alle ${ms.length} Filme von „${f.name}“ als ${target ? 'gekauft' : 'fehlend'} markieren?`, { title: 'Ganze Reihe ändern', okText: target ? 'Alle abhaken' : 'Alle als fehlend' })) return;
-    run(ms.filter(m => !!m.owned !== target).map(m => setOp('movies', m.id, { owned: target })));
+    run(ms.filter(m => !!m.owned !== target).map(m => setOp('movies', m.id, target ? { owned: true, ownedAt: Date.now() } : { owned: false })));
     toast(`„${f.name}“ aktualisiert`);
   },
   async bulkSeries(d) {
@@ -1525,7 +1653,7 @@ const A = {
     const ss = seasonsOf(d.id);
     const target = !ss.every(s => s.owned);
     if (!await confirmDialog(`Alle ${ss.length} Staffeln von „${se.name}“ als ${target ? 'gekauft' : 'fehlend'} markieren?`, { title: 'Ganze Serie ändern', okText: target ? 'Alle abhaken' : 'Alle als fehlend' })) return;
-    run(ss.filter(s => !!s.owned !== target).map(s => setOp('seasons', s.id, { owned: target })));
+    run(ss.filter(s => !!s.owned !== target).map(s => setOp('seasons', s.id, target ? { owned: true, ownedAt: Date.now() } : { owned: false })));
     toast(`„${se.name}“ aktualisiert`);
   },
   async deleteMovie(d) {
@@ -1646,6 +1774,24 @@ document.addEventListener('focusout', () => setTimeout(kbCheck, 80));
 window.visualViewport?.addEventListener('resize', kbCheck);
 window.addEventListener('pageshow', kbCheck);
 document.addEventListener('visibilitychange', kbCheck);
+// Lange drücken (Cover) = gekauft/fehlt umschalten, ohne die Details zu öffnen
+let lpTimer = null, lpFired = false, lpStart = null;
+document.addEventListener('pointerdown', e => {
+  const el = e.target.closest('[data-long]');
+  if (!el || e.button > 0 || e.target.closest('a[href]')) return;
+  lpFired = false; lpStart = [e.clientX, e.clientY];
+  clearTimeout(lpTimer);
+  lpTimer = setTimeout(() => {
+    lpFired = true;
+    navigator.vibrate?.(15);
+    el.classList.add('pressed'); setTimeout(() => el.classList.remove('pressed'), 250);
+    A[el.dataset.long]?.({ id: el.dataset.id });
+  }, 480);
+});
+['pointerup', 'pointercancel'].forEach(t => document.addEventListener(t, () => clearTimeout(lpTimer), true));
+document.addEventListener('pointermove', e => { if (lpStart && Math.hypot(e.clientX - lpStart[0], e.clientY - lpStart[1]) > 10) clearTimeout(lpTimer); }, true);
+document.addEventListener('click', e => { if (lpFired) { lpFired = false; e.stopPropagation(); e.preventDefault(); } }, true);
+document.addEventListener('contextmenu', e => { if (e.target.closest('[data-long]')) e.preventDefault(); });
 // Kompakte Filter-Auswahlfelder
 document.addEventListener('change', e => {
   const s = e.target.closest('[data-filter]');

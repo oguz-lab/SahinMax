@@ -51,6 +51,12 @@ export async function movieDetails(id) {
   };
 }
 
+// Nur das Szenenbild (für Hintergründe)
+export async function backdropFor(kind, id) {
+  const d = await get(`/${kind}/${id}`);
+  return IMG(d.backdrop_path, 'w1280');
+}
+
 export async function imdbRating(imdbId) {
   if (!keys.omdb || !imdbId) return '';
   try {
