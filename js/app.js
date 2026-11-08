@@ -359,6 +359,7 @@ function seriesItem(se) {
 const NAV = [['', 'Start', '⌂'], ['filme', 'Filme', '🎬'], ['serien', 'Serien', '📺'], ['mediathek', 'Mediathek', '♥'], ['suche', 'Suche', '🔍']];
 
 function renderShell() {
+  document.body.classList.remove('kb-open');
   $('#app').innerHTML = `
   <header class="topbar">
     <a class="brand" href="#/"><img class="logo-img" src="icons/logo-mark.png" alt=""><span>SahinMax</span></a>
@@ -484,7 +485,7 @@ function renderView(force) {
   (VIEWS[r.name] || VIEWS[''])(v, r.id, fresh);
 }
 
-window.addEventListener('hashchange', () => { U.closeAllModals(); UI.sortMode = false; window.scrollTo(0, 0); renderView(true); });
+window.addEventListener('hashchange', () => { document.body.classList.remove('kb-open'); U.closeAllModals(); UI.sortMode = false; window.scrollTo(0, 0); renderView(true); });
 let installPrompt = null;
 const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const isStandalone = () => navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
@@ -1633,10 +1634,18 @@ document.addEventListener('keydown', e => {
 });
 // iPhone: Während getippt wird, untere Leiste ausblenden (sonst schiebt die Tastatur sie nach oben)
 const TYPING = 'input:not([type=checkbox]):not([type=radio]):not([type=file]),textarea';
-document.addEventListener('focusin', e => { if (e.target.matches?.(TYPING)) document.body.classList.add('kb-open'); });
-document.addEventListener('focusout', () => setTimeout(() => {
-  if (!document.activeElement?.matches?.(TYPING)) document.body.classList.remove('kb-open');
-}, 80));
+const kbCheck = () => {
+  const typing = !!document.activeElement?.matches?.(TYPING) && document.activeElement.isConnected;
+  // Zusätzlich prüfen, ob die Tastatur wirklich Platz wegnimmt (sichtbarer Bereich geschrumpft)
+  const vv = window.visualViewport;
+  const shrunk = !vv || vv.height < window.innerHeight * 0.85;
+  document.body.classList.toggle('kb-open', typing && shrunk);
+};
+document.addEventListener('focusin', e => { if (e.target.matches?.(TYPING)) setTimeout(kbCheck, 350); });
+document.addEventListener('focusout', () => setTimeout(kbCheck, 80));
+window.visualViewport?.addEventListener('resize', kbCheck);
+window.addEventListener('pageshow', kbCheck);
+document.addEventListener('visibilitychange', kbCheck);
 // Kompakte Filter-Auswahlfelder
 document.addEventListener('change', e => {
   const s = e.target.closest('[data-filter]');
